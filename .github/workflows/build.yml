@@ -1,0 +1,45 @@
+name: Build and Release Firmware
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Set firmware version in build
+        run: |
+          sed -i "s/DFIRMWARE_VERSION='\"[^\"]*\"'/DFIRMWARE_VERSION='\"${{ steps.version.outputs.version }}\"'/g" platformio.ini
+
+      - name: Build firmware
+        run: pio run
+
+      - name: Rename firmware binary
+        run: |
+          cp .pio/build/m5sticks3/firmware.bin firmware-m5sticks3.bin
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            firmware-m5sticks3.bin
+          generate_release_notes: true

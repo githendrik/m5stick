@@ -1,0 +1,9 @@
+.pio/
+.pioenvs/
+.piolibdeps/
+.vscode/
+.venv/
+clang-format
+src/credentials.h
+
+backup/
