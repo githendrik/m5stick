@@ -45,6 +45,12 @@ input{width:100%;padding:8px;margin-top:2px;border:1px solid #ccc;border-radius:
 <h2>Devices</h2>
 <label>myStrom Toaster IP<input type="text" id="toaster_ip" placeholder="192.168.1.99"></label>
 
+<h2>Signal Voice Messages</h2>
+<label>Gateway IP<input type="text" id="sig_gw_ip" placeholder="192.168.1.50"></label>
+<label>Gateway Port<input type="number" id="sig_gw_port" placeholder="8080" value="8080"></label>
+<label>Recipient (international format)<input type="text" id="sig_recipient" placeholder="+41791234567"></label>
+<label>Auth Token (optional)<input type="text" id="sig_token" placeholder="bearer token"></label>
+
 <div style="margin-top:16px">
 <button class="btn btn-save" onclick="save()">Save</button>
 <button class="btn btn-status" onclick="status()">Status</button>
@@ -63,7 +69,13 @@ function msg(txt,ok){
   setTimeout(function(){m.style.display='none'},4000);
 }
 function save(){
-  var d={toaster_ip:document.getElementById('toaster_ip').value};
+  var d={
+    toaster_ip:document.getElementById('toaster_ip').value,
+    sig_gw_ip:document.getElementById('sig_gw_ip').value,
+    sig_gw_port:document.getElementById('sig_gw_port').value,
+    sig_recipient:document.getElementById('sig_recipient').value,
+    sig_token:document.getElementById('sig_token').value
+  };
   fetch('/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
   .then(function(r){return r.json()})
   .then(function(j){msg(j.message||'Saved',j.status==='ok')})
@@ -73,7 +85,7 @@ function status(){
   var box=document.getElementById('statusBox');
   box.style.display='block';box.textContent='Loading...';
   fetch('/status').then(function(r){return r.json()}).then(function(j){
-    box.innerHTML='<b>Firmware:</b> '+j.firmware+'<br><b>IP:</b> '+j.ip+'<br><b>WiFi:</b> '+j.ssid+' ('+j.rssi+' dBm)<br><b>Uptime:</b> '+j.uptime+'s<br><b>Free heap:</b> '+j.free_heap+' bytes<br><b>Toaster IP:</b> '+(j.toaster_ip||'not set');
+    box.innerHTML='<b>Firmware:</b> '+j.firmware+'<br><b>IP:</b> '+j.ip+'<br><b>WiFi:</b> '+j.ssid+' ('+j.rssi+' dBm)<br><b>Uptime:</b> '+j.uptime+'s<br><b>Free heap:</b> '+j.free_heap+' bytes<br><b>Toaster IP:</b> '+(j.toaster_ip||'not set')+'<br><b>Signal Gateway:</b> '+(j.sig_gw_ip||'not set')+':'+(j.sig_gw_port||'')+'<br><b>Signal Recipient:</b> '+(j.sig_recipient||'not set');
   }).catch(function(){box.textContent='Error fetching status'});
 }
 function reboot(){
@@ -115,6 +127,9 @@ function applyUpdate(){
 }
 fetch('/status').then(function(r){return r.json()}).then(function(j){
   if(j.toaster_ip)document.getElementById('toaster_ip').value=j.toaster_ip;
+  if(j.sig_gw_ip)document.getElementById('sig_gw_ip').value=j.sig_gw_ip;
+  if(j.sig_gw_port)document.getElementById('sig_gw_port').value=j.sig_gw_port;
+  if(j.sig_recipient)document.getElementById('sig_recipient').value=j.sig_recipient;
 }).catch(function(){});
 </script>
 </body>
@@ -139,6 +154,18 @@ void setupWebDashboard() {
         if (JSON.typeof(obj["toaster_ip"]) != "undefined") {
             config.toasterIp = (const char*)obj["toaster_ip"];
         }
+        if (JSON.typeof(obj["sig_gw_ip"]) != "undefined") {
+            config.signalGatewayIp = (const char*)obj["sig_gw_ip"];
+        }
+        if (JSON.typeof(obj["sig_gw_port"]) != "undefined") {
+            config.signalGatewayPort = atoi((const char*)obj["sig_gw_port"]);
+        }
+        if (JSON.typeof(obj["sig_recipient"]) != "undefined") {
+            config.signalRecipient = (const char*)obj["sig_recipient"];
+        }
+        if (JSON.typeof(obj["sig_token"]) != "undefined") {
+            config.signalAuthToken = (const char*)obj["sig_token"];
+        }
 
         config.saveAll();
         request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Saved\"}");
@@ -152,7 +179,10 @@ void setupWebDashboard() {
         json += "\"rssi\":" + String(WiFi.RSSI()) + ",";
         json += "\"uptime\":" + String(millis() / 1000) + ",";
         json += "\"free_heap\":" + String(ESP.getFreeHeap()) + ",";
-        json += "\"toaster_ip\":\"" + config.toasterIp + "\"";
+        json += "\"toaster_ip\":\"" + config.toasterIp + "\",";
+        json += "\"sig_gw_ip\":\"" + config.signalGatewayIp + "\",";
+        json += "\"sig_gw_port\":" + String(config.signalGatewayPort) + ",";
+        json += "\"sig_recipient\":\"" + config.signalRecipient + "\"";
         json += "}";
         request->send(200, "application/json", json);
     });

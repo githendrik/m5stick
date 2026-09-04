@@ -6,10 +6,11 @@
 #include "config_manager.h"
 #include "ota_update.h"
 #include "web_dashboard.h"
+#include "voice_message.h"
 
 ConfigManager config;
 
-#define NUM_APPS 3
+#define NUM_APPS 4
 
 int currentApp = 0;
 bool needsRedraw = true;
@@ -212,11 +213,60 @@ void drawBatteryIndicator() {
     }
 }
 
+void drawVoiceApp() {
+    M5.Display.fillScreen(BLACK);
+    drawCenteredText("Voice Message", 15, 1, TFT_CYAN);
+
+    switch (vmState) {
+        case VM_IDLE:
+            if (config.signalGatewayIp.length() == 0 || config.signalRecipient.length() == 0) {
+                drawCenteredText("Not configured", 50, 1, TFT_RED);
+                drawCenteredText("See web dashboard", 65, 1, 0x8410);
+                drawCenteredText("m5stick.local", 80, 1, TFT_CYAN);
+            } else {
+                drawCenteredText("Ready", 55, 2, TFT_GREEN);
+                drawCenteredText(config.signalRecipient.c_str(), 85, 1, 0x8410);
+                drawCenteredText("OK: Record", M5.Display.height() - 16, 1, 0x4228);
+            }
+            break;
+
+        case VM_RECORDING: {
+            M5.Display.fillCircle(M5.Display.width() / 2 - 40, 55, 6, TFT_RED);
+            int secs = vmGetRecordSeconds();
+            char timeStr[8];
+            snprintf(timeStr, sizeof(timeStr), "%d:%02d", secs / 60, secs % 60);
+            drawCenteredText(timeStr, 50, 3, TFT_WHITE);
+            drawCenteredText("OK: Stop & Send", M5.Display.height() - 16, 1, 0x4228);
+            break;
+        }
+
+        case VM_SENDING:
+            drawCenteredText("Sending...", 55, 2, TFT_YELLOW);
+            break;
+
+        case VM_SENT:
+            drawCenteredText("Sent!", 55, 2, TFT_GREEN);
+            break;
+
+        case VM_ERROR:
+            drawCenteredText("Failed", 55, 2, TFT_RED);
+            if (vmError.length() > 0) {
+                drawCenteredText(vmError.c_str(), 85, 1, 0x8410);
+            }
+            break;
+    }
+
+    char appStr[16];
+    snprintf(appStr, sizeof(appStr), "App %d/%d", currentApp + 1, NUM_APPS);
+    drawCenteredText(appStr, M5.Display.height() - 14, 1, 0x4228);
+}
+
 void drawApp() {
     switch (currentApp) {
         case 0: drawToasterApp(); break;
-        case 1: drawInfoApp(); break;
-        case 2: drawStatusApp(); break;
+        case 1: drawVoiceApp(); break;
+        case 2: drawInfoApp(); break;
+        case 3: drawStatusApp(); break;
     }
     drawBatteryIndicator();
 }
@@ -300,7 +350,7 @@ void loop() {
         }
     }
 
-    if (currentApp == 2) {
+    if (currentApp == 3) {
         if (M5.BtnA.wasPressed()) {
             otaStatusText = "Checking...";
             needsRedraw = true;
@@ -322,6 +372,61 @@ void loop() {
                 }
             } else {
                 otaStatusText = "Up to date";
+                needsRedraw = true;
+            }
+        }
+    }
+
+    if (currentApp == 1) {
+        if (vmState == VM_RECORDING) {
+            vmUpdateRecording();
+            if (vmGetRecordSeconds() >= VM_MAX_DURATION_S) {
+                vmStopRecording();
+                needsRedraw = true;
+            } else {
+                static unsigned long lastTimerDraw = 0;
+                if (millis() - lastTimerDraw > 500) {
+                    lastTimerDraw = millis();
+                    needsRedraw = true;
+                }
+            }
+        }
+
+        if (M5.BtnA.wasPressed()) {
+            switch (vmState) {
+                case VM_IDLE:
+                    if (config.signalGatewayIp.length() > 0 && config.signalRecipient.length() > 0) {
+                        vmStartRecording();
+                        needsRedraw = true;
+                    }
+                    break;
+
+                case VM_RECORDING:
+                    vmStopRecording();
+                    needsRedraw = true;
+                    break;
+
+                case VM_SENDING:
+                    break;
+
+                case VM_SENT:
+                case VM_ERROR:
+                    vmCleanup();
+                    vmState = VM_IDLE;
+                    vmError = "";
+                    needsRedraw = true;
+                    break;
+            }
+        }
+
+        if (vmState == VM_SENDING) {
+            bool ok = vmSend(config);
+            vmState = ok ? VM_SENT : VM_ERROR;
+            needsRedraw = true;
+            if (ok) {
+                delay(2000);
+                vmCleanup();
+                vmState = VM_IDLE;
                 needsRedraw = true;
             }
         }

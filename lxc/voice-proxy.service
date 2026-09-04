@@ -1,0 +1,14 @@
+[Unit]
+Description=Signal Voice Message Proxy
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/venv/bin/python3 /opt/voice_proxy.py
+EnvironmentFile=-/etc/voice-proxy.env
+Environment=PROXY_PORT=8080
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
