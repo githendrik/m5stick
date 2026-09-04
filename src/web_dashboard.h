@@ -143,8 +143,13 @@ void setupWebDashboard() {
 
     server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request) {
     }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-        String body = String((char*)data).substring(0, len);
+        static String body;
+        if (index == 0) body = "";
+        body.concat((const char*)data, len);
+        if (index + len < total) return;
+
         JSONVar obj = JSON.parse(body);
+        body = "";
 
         if (JSON.typeof(obj) == "undefined") {
             request->send(400, "application/json", "{\"status\":\"error\",\"message\":\"Invalid JSON\"}");
@@ -158,7 +163,7 @@ void setupWebDashboard() {
             config.signalGatewayIp = (const char*)obj["sig_gw_ip"];
         }
         if (JSON.typeof(obj["sig_gw_port"]) != "undefined") {
-            config.signalGatewayPort = atoi((const char*)obj["sig_gw_port"]);
+            config.signalGatewayPort = String((int)obj["sig_gw_port"]).toInt();
         }
         if (JSON.typeof(obj["sig_recipient"]) != "undefined") {
             config.signalRecipient = (const char*)obj["sig_recipient"];
