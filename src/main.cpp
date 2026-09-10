@@ -320,7 +320,8 @@ void setup() {
         char pctStr[24];
         snprintf(pctStr, sizeof(pctStr), "Updating... %d%%", percent);
         otaStatusText = pctStr;
-        needsRedraw = true;
+        drawStatusApp();
+        drawBatteryIndicator();
     });
 
     needsRedraw = true;
@@ -353,25 +354,33 @@ void loop() {
     if (currentApp == 3) {
         if (M5.BtnA.wasPressed()) {
             otaStatusText = "Checking...";
-            needsRedraw = true;
+            otaProgress = 0;
+            drawStatusApp();
+            drawBatteryIndicator();
 
             OTAUpdateInfo info = otaCheckForUpdate();
             if (info.available) {
                 otaStatusText = "Update: " + info.version;
-                needsRedraw = true;
-                delay(1000);
+                otaProgress = 0;
+                drawStatusApp();
+                drawBatteryIndicator();
+                delay(500);
 
                 if (otaApplyUpdate(info)) {
                     otaStatusText = "Success! Rebooting...";
-                    needsRedraw = true;
+                    otaProgress = 100;
+                    drawStatusApp();
+                    drawBatteryIndicator();
                     delay(1000);
                     ESP.restart();
                 } else {
                     otaStatusText = "Update failed";
+                    otaProgress = 0;
                     needsRedraw = true;
                 }
             } else {
                 otaStatusText = "Up to date";
+                otaProgress = 0;
                 needsRedraw = true;
             }
         }
@@ -440,12 +449,33 @@ void loop() {
 
     if (otaTriggered) {
         otaTriggered = false;
+        Serial.println("OTA: Triggered from dashboard");
+        otaStatusText = "Checking...";
+        otaProgress = 0;
+        currentApp = 3;
+        drawStatusApp();
+        drawBatteryIndicator();
+
         lastUpdateInfo = otaCheckForUpdate();
         if (lastUpdateInfo.available) {
+            otaStatusText = "Update: " + lastUpdateInfo.version;
+            otaProgress = 0;
+            drawStatusApp();
+            drawBatteryIndicator();
+            delay(500);
+
             if (otaApplyUpdate(lastUpdateInfo)) {
+                Serial.println("OTA: Update applied, rebooting...");
                 delay(1000);
                 ESP.restart();
+            } else {
+                otaStatusText = "Update failed";
+                otaProgress = 0;
+                needsRedraw = true;
             }
+        } else {
+            otaStatusText = "Up to date";
+            needsRedraw = true;
         }
     }
 

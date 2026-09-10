@@ -42,6 +42,7 @@ OTAUpdateInfo otaCheckForUpdate() {
 
     int httpCode = http.GET();
     if (httpCode != 200) {
+        Serial.printf("OTA: GitHub API returned %d\n", httpCode);
         http.end();
         return info;
     }
@@ -50,11 +51,18 @@ OTAUpdateInfo otaCheckForUpdate() {
     http.end();
 
     JSONVar release = JSON.parse(payload);
-    if (JSON.typeof(release) == "undefined") return info;
+    if (JSON.typeof(release) == "undefined") {
+        Serial.println("OTA: Failed to parse release JSON");
+        return info;
+    }
 
     String tagName = (const char*)release["tag_name"];
+    Serial.printf("OTA: Current=%s Remote=%s\n", FIRMWARE_VERSION, tagName.c_str());
 
-    if (tagName == FIRMWARE_VERSION) return info;
+    if (tagName == FIRMWARE_VERSION) {
+        Serial.println("OTA: Already up to date");
+        return info;
+    }
 
     JSONVar assets = release["assets"];
     for (int i = 0; i < assets.length(); i++) {
@@ -63,15 +71,26 @@ OTAUpdateInfo otaCheckForUpdate() {
             info.available = true;
             info.version = tagName;
             info.binUrl = (const char*)assets[i]["browser_download_url"];
+            Serial.printf("OTA: Update available: %s -> %s\n", FIRMWARE_VERSION, info.version.c_str());
+            Serial.printf("OTA: Binary URL: %s\n", info.binUrl.c_str());
             break;
         }
+    }
+
+    if (!info.available) {
+        Serial.printf("OTA: No asset named '%s' found in release\n", OTA_ASSET_NAME);
     }
 
     return info;
 }
 
 bool otaApplyUpdate(const OTAUpdateInfo& info) {
-    if (!info.available || info.binUrl.length() == 0) return false;
+    if (!info.available || info.binUrl.length() == 0) {
+        Serial.println("OTA: No update to apply");
+        return false;
+    }
+
+    Serial.printf("OTA: Downloading %s\n", info.binUrl.c_str());
 
     WiFiClientSecure client;
     client.setInsecure();
@@ -84,17 +103,22 @@ bool otaApplyUpdate(const OTAUpdateInfo& info) {
 
     int httpCode = http.GET();
     if (httpCode != 200) {
+        Serial.printf("OTA: Download failed, HTTP %d\n", httpCode);
         http.end();
         return false;
     }
 
     int contentLength = http.getSize();
     if (contentLength <= 0) {
+        Serial.println("OTA: Invalid content length");
         http.end();
         return false;
     }
 
+    Serial.printf("OTA: Firmware size: %d bytes\n", contentLength);
+
     if (!Update.begin(contentLength)) {
+        Serial.printf("OTA: Not enough space: %s\n", Update.errorString());
         http.end();
         return false;
     }
@@ -116,6 +140,7 @@ bool otaApplyUpdate(const OTAUpdateInfo& info) {
         if (bytesRead <= 0) break;
 
         if (Update.write(buf, bytesRead) != (size_t)bytesRead) {
+            Serial.printf("OTA: Write failed: %s\n", Update.errorString());
             Update.abort();
             http.end();
             return false;
@@ -125,15 +150,27 @@ bool otaApplyUpdate(const OTAUpdateInfo& info) {
         int percent = (written * 100) / contentLength;
         if (percent != lastPercent && percent % 10 == 0) {
             lastPercent = percent;
+            Serial.printf("OTA: %d%%\n", percent);
             if (_otaProgressCb) _otaProgressCb(percent);
         }
     }
 
     http.end();
 
-    if (!Update.end(true)) return false;
+    if (!Update.end(true)) {
+        Serial.printf("OTA: Finalize failed: %s\n", Update.errorString());
+        return false;
+    }
 
+    Serial.println("OTA: Update successful");
     return true;
+}
+
+// Convenience: check and apply in one call, returns true if update was applied (reboot needed)
+bool otaCheckAndApply() {
+    OTAUpdateInfo info = otaCheckForUpdate();
+    if (!info.available) return false;
+    return otaApplyUpdate(info);
 }
 
 #endif
