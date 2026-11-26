@@ -156,20 +156,29 @@ void setupWebDashboard() {
             return;
         }
 
-        if (JSON.typeof(obj["toaster_ip"]) != "undefined") {
-            config.toasterIp = (const char*)obj["toaster_ip"];
-        }
-        if (JSON.typeof(obj["sig_gw_ip"]) != "undefined") {
-            config.signalGatewayIp = (const char*)obj["sig_gw_ip"];
-        }
-        if (JSON.typeof(obj["sig_gw_port"]) != "undefined") {
-            config.signalGatewayPort = String((int)obj["sig_gw_port"]).toInt();
-        }
-        if (JSON.typeof(obj["sig_recipient"]) != "undefined") {
-            config.signalRecipient = (const char*)obj["sig_recipient"];
-        }
-        if (JSON.typeof(obj["sig_token"]) != "undefined") {
-            config.signalAuthToken = (const char*)obj["sig_token"];
+        // Only touch fields that were sent as strings: JSONVar::operator[]
+        // inserts null for missing keys, which would otherwise wipe them.
+        auto readString = [&obj](const char* key, String& target) {
+            if (obj.hasOwnProperty(key) && JSON.typeof(obj[key]) == "string") {
+                target = (const char*)obj[key];
+            }
+        };
+        readString("toaster_ip", config.toasterIp);
+        readString("sig_gw_ip", config.signalGatewayIp);
+        readString("sig_recipient", config.signalRecipient);
+        readString("sig_token", config.signalAuthToken);
+
+        if (obj.hasOwnProperty("sig_gw_port")) {
+            String portType = JSON.typeof(obj["sig_gw_port"]);
+            int port = 0;
+            if (portType == "number") {
+                port = (int)obj["sig_gw_port"];
+            } else if (portType == "string") {
+                port = String((const char*)obj["sig_gw_port"]).toInt();
+            }
+            if (port > 0 && port <= 65535) {
+                config.signalGatewayPort = port;
+            }
         }
 
         config.saveAll();
